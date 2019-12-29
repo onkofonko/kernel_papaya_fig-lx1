@@ -1573,7 +1573,6 @@ void d_invalidate(struct dentry *dentry)
 			detach_mounts(data.mountpoint);
 			dput(data.mountpoint);
 		}
-
 		cond_resched();
 	}
 }
