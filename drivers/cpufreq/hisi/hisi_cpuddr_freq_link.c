@@ -1,5 +1,5 @@
 /*
- * Hisilicon Platforms CPUFDDR_FREQ_LINK support
+ * Hisilicon Platforms CPUDDR_FREQ_LINK support
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -24,7 +24,7 @@
 #include <linux/slab.h>
 
 
-int set_cpu_ddr_link_governor(unsigned int ddr_lvl)
+int set_cpu_ddr_link_level(unsigned int ddr_lvl)
 {
 	unsigned int *msg;
 	int rproc_id = HISI_RPROC_LPM3_MBX13;
@@ -57,7 +57,8 @@ static int cpuddr_freq_link_notify(struct notifier_block *nb,
 		unsigned long val, void *v)
 {
 	int ret;
-	ret = set_cpu_ddr_link_governor((unsigned int)val);
+
+	ret = set_cpu_ddr_link_level((unsigned int)val);
 	if (ret)
 		return NOTIFY_BAD;
 	else
@@ -68,16 +69,10 @@ static struct notifier_block cpuddr_freq_link_notifier = {
 	.notifier_call = cpuddr_freq_link_notify,
 };
 
-void cpuddr_freq_link_notifier_init(struct notifier_block *nb)
-{
-	pm_qos_add_notifier(PM_QOS_ACPUDDR_LINK_GOVERNOR_LEVEL, nb);
-}
-
 static __init int hisi_cpuddr_freq_link_init(void)
 {
-	cpuddr_freq_link_notifier_init(&cpuddr_freq_link_notifier);
+	pm_qos_add_notifier(PM_QOS_FREQ_LINK_LEVEL, &cpuddr_freq_link_notifier);
 
 	return 0;
 }
 module_init(hisi_cpuddr_freq_link_init);
-
