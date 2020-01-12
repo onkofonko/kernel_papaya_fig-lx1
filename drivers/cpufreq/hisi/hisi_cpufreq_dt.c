@@ -49,7 +49,7 @@ static int cpufreq_freq_req_policy_notifier(struct notifier_block *nb,
 				 policy->min, policy->max);
 
 	cpufreq_verify_within_limits(policy, req->freq,
-				     policy->max);
+				     policy->cpuinfo.max_freq);
 
 	return NOTIFY_OK;
 }
@@ -144,7 +144,7 @@ void l2_dynamic_retention_ctrl(struct cpufreq_policy *policy, unsigned int freq)
 
 int l2_dynamic_retention_init(void)
 {
-	struct device_node *np = NULL;
+	struct device_node *np;
 	int ret = -ENODEV;
 
 	l2_ret_ctrl = kzalloc(sizeof(struct l2_retention_ctrl), GFP_KERNEL);
@@ -248,10 +248,11 @@ void hisi_cpufreq_put_supported_hw(struct opp_table *opp_table)
 
 static int hisi_cpufreq_get_dt_version(void)
 {
-	const char *target_cpu = NULL;
+	const char *target_cpu;
 	int ret, index;
-	struct device_node *np = of_find_compatible_node(NULL, NULL, "hisi,targetcpu");
+	struct device_node *np;
 
+	np = of_find_compatible_node(NULL, NULL, "hisi,targetcpu");
 	if (!np) {
 		pr_err("%s Failed to find compatible node:targetcpu\n", __func__);
 		return -ENODEV;
@@ -287,10 +288,11 @@ static int hisi_cpufreq_get_dt_version(void)
 
 void hisi_cpufreq_get_suspend_freq(struct cpufreq_policy *policy)
 {
+	struct device_node *np;
 	unsigned int value;
 	int cluster, ret;
-	struct device_node *np = of_find_compatible_node(NULL, NULL, "hisi,suspend-freq");
 
+	np = of_find_compatible_node(NULL, NULL, "hisi,suspend-freq");
 	if (!np)
 		return;
 
@@ -304,12 +306,13 @@ void hisi_cpufreq_get_suspend_freq(struct cpufreq_policy *policy)
 }
 
 #ifdef CONFIG_HISI_HW_VOTE_CPU_FREQ
+
 struct hvdev *hisi_cpufreq_hv_init(struct device *cpu_dev)
 {
-	struct device_node *np = NULL;
+	struct device_node *np;
 	struct hvdev *cpu_hvdev = NULL;
-	const char *ch_name = NULL;
-	const char *vsrc = NULL;
+	const char *ch_name;
+	const char *vsrc;
 	int ret;
 
 	if (IS_ERR_OR_NULL(cpu_dev)) {
@@ -402,7 +405,7 @@ exception:
 
 int hisi_cpufreq_init(void)
 {
-	int ret;
+	int ret = 0;
 
 	if (!of_find_compatible_node(NULL, NULL, "arm,generic-bL-cpufreq"))
 		return -ENODEV;
