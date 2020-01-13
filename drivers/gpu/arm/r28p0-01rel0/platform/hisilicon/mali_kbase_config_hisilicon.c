@@ -779,34 +779,29 @@ static void pm_callback_power_off(struct kbase_device *kbdev)
 	KBASE_TRACE_ADD(kbdev, CORE_GPU_HARD_RESET, NULL, NULL, 0u, 0);
 	kbase_reg_write(kbdev, GPU_CONTROL_REG(GPU_COMMAND), GPU_COMMAND_HARD_RESET);
 #endif
-	// If RPM disabled, directly call kbase_platform_off() to power off.
-	unsigned long flags;
-	spin_lock_irqsave(&dev->power.lock, flags);
+
 	if (unlikely(dev->power.disable_depth > 0)) {
-		spin_unlock_irqrestore(&dev->power.lock, flags);
 		kbase_platform_off(kbdev);
-		return;
-	}
+	} else {
+		do {
+			if (kbase_has_hi_feature(kbdev, KBASE_FEATURE_HI0007))
+				ret = pm_schedule_suspend(dev, RUNTIME_PM_DELAY_1MS);
+			else
+				ret = pm_schedule_suspend(dev, RUNTIME_PM_DELAY_30MS);
+			if (ret != -EAGAIN) {
+				if (unlikely(ret < 0)) {
+					pr_err("[mali]  pm_schedule_suspend failed (%d)\n\n", ret);
+					WARN_ON(1);
+				}
 
-	spin_unlock_irqrestore(&dev->power.lock, flags);
-	// Using schedule suspend interface to power off GPU.
-	do {
-		if (kbase_has_hi_feature(kbdev, KBASE_FEATURE_HI0007))
-			ret = pm_schedule_suspend(dev, RUNTIME_PM_DELAY_1MS);
-		else
-			ret = pm_schedule_suspend(dev, RUNTIME_PM_DELAY_30MS);
-
-		if (ret != -EAGAIN) {
-			if (unlikely(ret < 0)) {
-				pr_err("[mali]  pm_schedule_suspend failed[%d] retry[%d]\n\n", ret, retry);
-				WARN_ON(1);
-				// When RPM is disabled (the return value is not 'retry'), use 'kbase_platform_off' to power down.
-				kbase_platform_off(kbdev);
+				/* correct status */
+				break;
 			}
-			break; /* correct status */
-		}
-		msleep(50); /* -EAGAIN, repeated attempts for 1s totally */
-	}while (++retry < 20);
+
+			/* -EAGAIN, repeated attempts for 1s totally */
+			msleep(50);
+		} while (++retry < 20);
+	}
 #else
 	kbase_platform_off(kbdev);
 #endif
