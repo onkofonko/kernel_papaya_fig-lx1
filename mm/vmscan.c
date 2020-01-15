@@ -3766,7 +3766,6 @@ static void kswapd_try_to_sleep(pg_data_t *pgdat, int alloc_order, int reclaim_o
 	/* Try to sleep for a short interval */
 	if (prepare_kswapd_sleep(pgdat, reclaim_order, classzone_idx)) {
 
-	simple_lmk_stop_reclaim();
 #ifdef CONFIG_HISI_KCOMPACT
 		/*
 		 * Compaction records what page blocks it recently failed to
@@ -3802,7 +3801,6 @@ static void kswapd_try_to_sleep(pg_data_t *pgdat, int alloc_order, int reclaim_o
 	 */
 	if (!remaining &&
 	    prepare_kswapd_sleep(pgdat, reclaim_order, classzone_idx)) {
-		simple_lmk_stop_reclaim();
 		trace_mm_vmscan_kswapd_sleep(pgdat->node_id);
 
 		/*
