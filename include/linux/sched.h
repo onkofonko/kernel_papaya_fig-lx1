@@ -2893,6 +2893,9 @@ static inline int set_cpus_allowed_ptr(struct task_struct *p,
 }
 #endif
 
+extern u32 sched_get_wake_up_idle(struct task_struct *p);
+extern int sched_set_wake_up_idle(struct task_struct *p, int wake_up_idle);
+
 #ifdef CONFIG_NO_HZ_COMMON
 void calc_load_enter_idle(void);
 void calc_load_exit_idle(void);
@@ -4099,8 +4102,30 @@ void cpufreq_remove_update_util_hook(int cpu);
 #endif /* CONFIG_CPU_FREQ */
 
 #ifdef CONFIG_DYNAMIC_STUNE_BOOST
-int do_stune_boost(char *st_name, int boost);
-int reset_stune_boost(char *st_name);
+int do_stune_boost(char *st_name, int boost, int *slot);
+int do_stune_sched_boost(char *st_name, int *slot);
+int reset_stune_boost(char *st_name, int slot);
+int do_prefer_idle(char *st_name, u64 prefer_idle);
+#else /* !CONFIG_DYNAMIC_STUNE_BOOST */
+static inline int do_stune_boost(char *st_name, int boost, int *slot)
+{
+	return 0;
+}
+
+static inline int do_stune_sched_boost(char *st_name, int *slot)
+{
+	return 0;
+}
+
+static inline int reset_stune_boost(char *st_name, int slot)
+{
+	return 0;
+}
+
+static inline int do_prefer_idle(char *st_name, u64 prefer_idle)
+{
+	return 0;
+}
 #endif /* CONFIG_DYNAMIC_STUNE_BOOST */
 
 #ifdef CONFIG_SCHED_HWSTATUS
