@@ -865,4 +865,8 @@ config SPECULATIVE_PAGE_FAULT
 	 allocating, it is failing its processing and a classic page fault
 	 is then tried.
 
+config VMSTAT_INTERVAL
+	int "Default interval in seconds to update vmstat"
+	default 1
+
 source "mm/hisi/Kconfig"
