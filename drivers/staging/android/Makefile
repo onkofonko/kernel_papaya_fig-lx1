@@ -5,6 +5,7 @@ obj-$(CONFIG_FIQ_DEBUGGER)		+= fiq_debugger/
 
 obj-$(CONFIG_ASHMEM)			+= ashmem.o
 obj-$(CONFIG_ANDROID_LOW_MEMORY_KILLER)	+= lowmemorykiller.o
+obj-$(CONFIG_HISI_LOW_MEMORY_KILLER)	+= hisi_lowmemorykiller.o
 obj-$(CONFIG_ANDROID_INTF_ALARM_DEV)	+= alarm-dev.o
 obj-$(CONFIG_ANDROID_VSOC)              += vsoc.o
 obj-$(CONFIG_HISI_SMART_RECLAIM)	+= smart_reclaim.o
