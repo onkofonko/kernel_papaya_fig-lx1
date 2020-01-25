@@ -79,7 +79,9 @@
 #include <linux/hisi/hisi_hkip.h>
 #include <linux/kcov.h>
 
+#ifdef
 #include <linux/simple_lmk.h>
+#endif
 
 #include <linux/blk-cgroup.h>
 
@@ -954,7 +956,9 @@ static inline void __mmput(struct mm_struct *mm)
 	if (mm->binfmt)
 		module_put(mm->binfmt->module);
 	set_bit(MMF_OOM_SKIP, &mm->flags);
+#ifdef CONFIG_ANDROID_SIMPLE_LMK
 	simple_lmk_mm_freed(mm);
+#endif
 	mmdrop(mm);
 }
 
