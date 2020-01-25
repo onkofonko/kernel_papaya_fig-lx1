@@ -42,21 +42,13 @@
 #include <linux/rcupdate.h>
 #include <linux/profile.h>
 #include <linux/notifier.h>
-#include <linux/atomic.h>
-#include <hisi/hisi_lmk/lowmem_killer.h>
 
 #define CREATE_TRACE_POINTS
 #include "trace/lowmemorykiller.h"
 
-#ifdef CONFIG_HUAWEI_KSTATE
-#include <huawei_platform/power/hw_kcollect.h>
-#endif
-
-#ifdef CONFIG_HW_ZEROHUNG
-#include <chipset_common/hwzrhung/zrhung.h>
-#endif
-
 static u32 lowmem_debug_level = 1;
+extern int extra_free_kbytes;
+
 static short lowmem_adj[6] = {
 	0,
 	1,
@@ -73,29 +65,11 @@ static int lowmem_minfree[6] = {
 };
 
 static int lowmem_minfree_size = 4;
-#if defined CONFIG_LOG_JANK
-static ulong lowmem_kill_count;
-static ulong lowmem_free_mem;
-#endif
-#ifdef CONFIG_HISI_MULTI_KILL
+
 /*
- * lmk_multi_kill: select open/close multi kill
- * if lmk_multi_kill open
- *    1/selected process adj >= lmk_multi_fadj,
- *      we kill multi process max count = lmk_multi_fcount,
- *    2/selected process adj < lmk_multi_fadj,
- *      select process adj >= lmk_multi_sadj,
- *      we kill multi process max count = lmk_multi_scount,
- *    3/selected process adj < lmk_multi_sadj,
- *      we kill one process,
+ * This parameter tracks the kill count per minfree since boot.
  */
-static int lmk_multi_kill;
-static int lmk_multi_fadj = 800;
-static int lmk_multi_fcount = 5;
-static int lmk_multi_sadj = 300;
-static int lmk_multi_scount = 3;
-static int lmk_timeout_inter = 1;
-#endif
+static int lowmem_per_minfree_count[6];
 
 static unsigned long lowmem_deathpending_timeout;
 
@@ -114,6 +88,12 @@ static unsigned long lowmem_count(struct shrinker *s,
 		global_node_page_state(NR_INACTIVE_FILE);
 }
 
+#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
+static inline struct task_struct *pick_next_from_adj_tree(struct task_struct *task);
+static inline struct task_struct *pick_first_task(void);
+static inline struct task_struct *pick_last_task(void);
+#endif
+
 static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 {
 	struct task_struct *tsk;
@@ -131,23 +111,18 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 				global_node_page_state(NR_SHMEM) -
 				global_node_page_state(NR_UNEVICTABLE) -
 				total_swapcache_pages();
-	int ret_tune;
-
-#ifdef CONFIG_HISI_MULTI_KILL
-	int count = 0;
-#endif
-	static atomic_t atomic_lmk = ATOMIC_INIT(0);
-
-	ret_tune = hisi_lowmem_tune(&other_free, &other_file, sc);
+	int minfree_count_offset = 0;
 
 	if (lowmem_adj_size < array_size)
 		array_size = lowmem_adj_size;
 	if (lowmem_minfree_size < array_size)
 		array_size = lowmem_minfree_size;
 	for (i = 0; i < array_size; i++) {
-		minfree = lowmem_minfree[i];
+		minfree = lowmem_minfree[i] +
+			  ((extra_free_kbytes * 1024) / PAGE_SIZE);
 		if (other_free < minfree && other_file < minfree) {
 			min_score_adj = lowmem_adj[i];
+			minfree_count_offset = i;
 			break;
 		}
 	}
@@ -164,16 +139,14 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 
 	selected_oom_score_adj = min_score_adj;
 
-	if (atomic_inc_return(&atomic_lmk) > 1) {
-		atomic_dec(&atomic_lmk);
-		return 0;
-	}
-
 	rcu_read_lock();
-#ifdef CONFIG_HISI_MULTI_KILL
-kill_selected:
-#endif
+#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
+	for (tsk = pick_first_task();
+		tsk != pick_last_task() && tsk != NULL;
+		tsk = pick_next_from_adj_tree(tsk)) {
+#else
 	for_each_process(tsk) {
+#endif
 		struct task_struct *p;
 		short oom_score_adj;
 
@@ -184,28 +157,20 @@ kill_selected:
 		if (!p)
 			continue;
 
-		if (task_lmk_waiting(p)) {
-			if (time_before_eq(jiffies,
-					lowmem_deathpending_timeout)) {
-				task_unlock(p);
-				rcu_read_unlock();
-				atomic_dec(&atomic_lmk);
-				return 0;
-			} else {
-				hisi_lowmem_dbg_timeout(tsk, p);
-#ifdef CONFIG_HISI_MULTI_KILL
-				if (lmk_multi_kill) {
-					task_unlock(p);
-					continue;
-				}
-#endif
-			}
+		if (task_lmk_waiting(p) &&
+		    time_before_eq(jiffies, lowmem_deathpending_timeout)) {
+			task_unlock(p);
+			rcu_read_unlock();
+			return 0;
 		}
-
 		oom_score_adj = p->signal->oom_score_adj;
 		if (oom_score_adj < min_score_adj) {
 			task_unlock(p);
+#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
+			break;
+#else
 			continue;
+#endif
 		}
 		tasksize = get_mm_rss(p->mm);
 		task_unlock(p);
@@ -229,84 +194,134 @@ kill_selected:
 		long cache_limit = minfree * (long)(PAGE_SIZE / 1024);
 		long free = other_free * (long)(PAGE_SIZE / 1024);
 
-#ifdef CONFIG_HUAWEI_KSTATE
-		/*0 stand for low memory kill*/
-		hwkillinfo(selected->tgid, 0);
-#endif
 		task_lock(selected);
 		send_sig(SIGKILL, selected, 0);
 		if (selected->mm)
 			task_set_lmk_waiting(selected);
 		task_unlock(selected);
 		trace_lowmemory_kill(selected, cache_size, cache_limit, free);
+		lowmem_per_minfree_count[minfree_count_offset]++;
 		lowmem_print(1, "Killing '%s' (%d) (tgid %d), adj %hd,\n"
 				 "   to free %ldkB on behalf of '%s' (%d) because\n"
 				 "   cache %ldkB is below limit %ldkB for oom_score_adj %hd\n"
-				 "   Free memory is %ldkB above reserved (%d 0x%x)\n",
+				 "   Free memory is %ldkB above reserved\n",
 			     selected->comm, selected->pid, selected->tgid,
 			     selected_oom_score_adj,
 			     selected_tasksize * (long)(PAGE_SIZE / 1024),
 			     current->comm, current->pid,
 			     cache_size, cache_limit,
 			     min_score_adj,
-			     free, ret_tune, sc->gfp_mask);
-
-		hisi_lowmem_dbg(selected_oom_score_adj);
-
-#ifdef CONFIG_HW_ZEROHUNG
-#ifdef CONFIG_HISI_MULTI_KILL
-		if (count  == 0)
-#endif
-			lmkwp_report(selected, sc, cache_size, cache_limit, selected_oom_score_adj, free);
-#endif
-
-#ifdef CONFIG_HISI_MULTI_KILL
-		lowmem_deathpending_timeout = jiffies + lmk_timeout_inter * HZ;/*lint !e647*/
-#else
+			     free);
 		lowmem_deathpending_timeout = jiffies + HZ;
-#endif
-
-#if defined CONFIG_LOG_JANK
-		lowmem_kill_count++;
-		lowmem_free_mem += selected_tasksize *
-			(long)(PAGE_SIZE / 1024) / 1024;
-#endif
-
 		rem += selected_tasksize;
 	}
 
 	lowmem_print(4, "lowmem_scan %lu, %x, return %lu\n",
 		     sc->nr_to_scan, sc->gfp_mask, rem);
-
-#ifdef CONFIG_HISI_MULTI_KILL
-	if (selected && lmk_multi_kill) {
-		count++;
-		if (!((count >= lmk_multi_fcount) ||
-			(selected_oom_score_adj < lmk_multi_sadj) ||
-			((selected_oom_score_adj < lmk_multi_fadj) &&
-				(count >= lmk_multi_scount)))) {
-			selected = NULL;
-			goto kill_selected;
-		}
-	}
-#endif
-
 	rcu_read_unlock();
-	atomic_dec(&atomic_lmk);
 	return rem;
 }
+
+#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
+static DEFINE_SPINLOCK(lmk_lock);
+static struct rb_root tasks_scoreadj = RB_ROOT;
+void add_2_adj_tree(struct task_struct *task)
+{
+	struct rb_node **link;
+	struct rb_node *parent = NULL;
+	struct signal_struct *sig_entry;
+	s64 key = task->signal->oom_score_adj;
+
+	/*
+	 * Find the right place in the rbtree:
+	 */
+	spin_lock(&lmk_lock);
+	link =  &tasks_scoreadj.rb_node;
+	while (*link) {
+		parent = *link;
+		sig_entry = rb_entry(parent, struct signal_struct, adj_node);
+
+		if (key < sig_entry->oom_score_adj)
+			link = &parent->rb_right;
+		else
+			link = &parent->rb_left;
+	}
+
+	rb_link_node(&task->signal->adj_node, parent, link);
+	rb_insert_color(&task->signal->adj_node, &tasks_scoreadj);
+	spin_unlock(&lmk_lock);
+}
+
+/*
+ * Makesure to invoke the function with holding sighand->siglock
+ */
+void delete_from_adj_tree(struct task_struct *task)
+{
+	spin_lock(&lmk_lock);
+	if (!RB_EMPTY_NODE(&task->signal->adj_node)) {
+		rb_erase(&task->signal->adj_node, &tasks_scoreadj);
+		RB_CLEAR_NODE(&task->signal->adj_node);
+	}
+	spin_unlock(&lmk_lock);
+}
+
+static struct task_struct *pick_next_from_adj_tree(struct task_struct *task)
+{
+	struct rb_node *next;
+	struct signal_struct *next_tsk_sig;
+
+	spin_lock(&lmk_lock);
+	next = rb_next(&task->signal->adj_node);
+	spin_unlock(&lmk_lock);
+
+	if (!next)
+		return NULL;
+
+	next_tsk_sig = rb_entry(next, struct signal_struct, adj_node);
+	return next_tsk_sig->curr_target->group_leader;
+}
+
+static struct task_struct *pick_first_task(void)
+{
+	struct rb_node *left;
+	struct signal_struct *first_tsk_sig;
+
+	spin_lock(&lmk_lock);
+	left = rb_first(&tasks_scoreadj);
+	spin_unlock(&lmk_lock);
+
+	if (!left)
+		return NULL;
+
+	first_tsk_sig = rb_entry(left, struct signal_struct, adj_node);
+	return first_tsk_sig->curr_target->group_leader;
+}
+static struct task_struct *pick_last_task(void)
+{
+	struct rb_node *right;
+	struct signal_struct *last_tsk_sig;
+
+	spin_lock(&lmk_lock);
+	right = rb_last(&tasks_scoreadj);
+	spin_unlock(&lmk_lock);
+
+	if (!right)
+		return NULL;
+
+	last_tsk_sig = rb_entry(right, struct signal_struct, adj_node);
+	return last_tsk_sig->curr_target->group_leader;
+}
+#endif
 
 static struct shrinker lowmem_shrinker = {
 	.scan_objects = lowmem_scan,
 	.count_objects = lowmem_count,
-	.seeks = DEFAULT_SEEKS * 16
+	.seeks = DEFAULT_SEEKS * 16,
+	.flags = SHRINKER_LMK
 };
 
 static int __init lowmem_init(void)
 {
-#ifdef CONFIG_HW_ZEROHUNG
-	lmkwp_init();
-#endif
 	register_shrinker(&lowmem_shrinker);
 	return 0;
 }
@@ -404,18 +419,8 @@ module_param_array_named(adj, lowmem_adj, short, &lowmem_adj_size, 0644);
 #endif
 module_param_array_named(minfree, lowmem_minfree, uint, &lowmem_minfree_size,
 			 0644);
+module_param_array_named(lmk_count, lowmem_per_minfree_count, uint, NULL,
+			 S_IRUGO);
 module_param_named(debug_level, lowmem_debug_level, uint, 0644);
-#if defined CONFIG_LOG_JANK
-module_param_named(kill_count, lowmem_kill_count, ulong, S_IRUGO | S_IWUSR);
-module_param_named(free_mem, lowmem_free_mem, ulong, S_IRUGO | S_IWUSR);
-#endif
-#ifdef CONFIG_HISI_MULTI_KILL
-module_param_named(lmk_multi_kill, lmk_multi_kill, int, S_IRUGO | S_IWUSR);
-module_param_named(lmk_multi_fadj, lmk_multi_fadj, int, S_IRUGO | S_IWUSR);
-module_param_named(lmk_multi_fcount, lmk_multi_fcount, int, S_IRUGO | S_IWUSR);
-module_param_named(lmk_multi_sadj, lmk_multi_sadj, int, S_IRUGO | S_IWUSR);
-module_param_named(lmk_multi_scount, lmk_multi_scount, int, S_IRUGO | S_IWUSR);
-module_param_named(lmk_timeout_inter, lmk_timeout_inter, int,
-			S_IRUGO | S_IWUSR);
-#endif
+
 
