@@ -79,7 +79,7 @@
 #include <linux/hisi/hisi_hkip.h>
 #include <linux/kcov.h>
 
-#ifdef
+#ifdef CONFIG_ANDROID_SIMPLE_LMK
 #include <linux/simple_lmk.h>
 #endif
 
