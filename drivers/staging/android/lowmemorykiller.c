@@ -43,6 +43,10 @@
 #include <linux/profile.h>
 #include <linux/notifier.h>
 
+#ifdef CONFIG_HUAWEI_KSTATE
+#include <huawei_platform/power/hw_kcollect.h>
+#endif
+
 #define CREATE_TRACE_POINTS
 #include "trace/lowmemorykiller.h"
 
@@ -193,6 +197,11 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		long cache_size = other_file * (long)(PAGE_SIZE / 1024);
 		long cache_limit = minfree * (long)(PAGE_SIZE / 1024);
 		long free = other_free * (long)(PAGE_SIZE / 1024);
+		
+#ifdef CONFIG_HUAWEI_KSTATE
+		/*0 stand for low memory kill*/
+		hwkillinfo(selected->tgid, 0);
+#endif
 
 		task_lock(selected);
 		send_sig(SIGKILL, selected, 0);
