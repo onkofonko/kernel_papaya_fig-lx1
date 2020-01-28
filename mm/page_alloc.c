@@ -4365,6 +4365,14 @@ long si_mem_available(void)
 	 */
 	available += global_page_state(NR_SLAB_RECLAIMABLE) -
 		     min(global_page_state(NR_SLAB_RECLAIMABLE) / 2, wmark_low);/*lint !e666*/
+
+	/*
+	 * Part of the kernel memory, which can be released under memory
+	 * pressure.
+	 */
+	available += global_node_page_state(NR_INDIRECTLY_RECLAIMABLE_BYTES) >>
+		PAGE_SHIFT;
+
 	/*
 	 * Add the ioncache pool pages
 	 */
