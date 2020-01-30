@@ -1568,11 +1568,8 @@ struct bio *bio_copy_kern(struct request_queue *q, void *data, unsigned int len,
 		if (!reading)
 			memcpy(page_address(page), p, bytes);
 
-		if (bio_add_pc_page(q, bio, page, bytes, 0) < bytes) {
-			if (!map_data)
-				__free_page(page);
+		if (bio_add_pc_page(q, bio, page, bytes, 0) < bytes)/*lint !e574*/
 			break;
-		}
 
 		len -= bytes;
 		p += bytes;
