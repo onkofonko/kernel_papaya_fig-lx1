@@ -890,6 +890,7 @@ fail:
 	blk_free_flush_queue(q->fq);
 	wbt_exit(q->rq_wb);
 	q->rq_wb = NULL;
+	q->fq = NULL;
 	return NULL;
 }
 EXPORT_SYMBOL(blk_init_allocated_queue);
