@@ -1240,8 +1240,11 @@ struct bio *bio_copy_user_iov(struct request_queue *q,
 			}
 		}
 
-		if (((unsigned int)bio_add_pc_page(q, bio, page, bytes, offset)) < bytes)
+		if (((unsigned int)bio_add_pc_page(q, bio, page, bytes, offset)) < bytes) {
+			if (!map_data)
+				__free_page(page);
 			break;
+			}
 
 		len -= bytes;
 		offset = 0;
