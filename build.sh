@@ -1,4 +1,4 @@
-###kernel build
+#kernel build
 
 #change CROSS_COMPILE location to yours
 
@@ -9,4 +9,8 @@ make ARCH=arm64 O=../out mrproper
 make ARCH=arm64 O=../out papaya_defconfig
 
 make ARCH=arm64 O=../out -j$(nproc --all)
+
+#create kernel.img
+
+/home/ondrej/kernel/github/kernel_papaya/tools/pack_kernerimage_cmd.sh
 
