@@ -1203,7 +1203,14 @@ int hci_inquiry(void __user *arg)
 	if (!hdev)
 		return -ENODEV;
 
-	if (hci_dev_test_flag(hdev, HCI_USER_CHANNEL)) {
+	/* If the device has been opened in HCI_USER_CHANNEL,
+		 * the userspace has exclusive access to device.
+		 * When device is HCI_INIT, we still need to process
+		 * the data packets to the driver in order
+		 * to complete its setup().
+		 */
+		if (hci_dev_test_flag(hdev, HCI_USER_CHANNEL) &&
+		    !test_bit(HCI_INIT, &hdev->flags)) {
 		err = -EBUSY;
 		goto done;
 	}
