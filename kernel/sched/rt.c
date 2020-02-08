@@ -5,6 +5,8 @@
 
 #include "sched.h"
 #include "walt.h"
+#include "tune.h"
+
 #include <linux/hisi_rtg.h>
 
 #include <linux/interrupt.h>
