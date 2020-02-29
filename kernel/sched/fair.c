@@ -7505,7 +7505,7 @@ static int start_cpu(bool boosted)
 {
 	struct root_domain *rd = cpu_rq(smp_processor_id())->rd;
 
-	if(!sched_feat(STUNE_BOOST_BIAS_BIG))
+	if (!sched_feat(STUNE_BOOST_BIAS_BIG))
 		return rd->min_cap_orig_cpu;
 
 #ifdef CONFIG_HISI_EAS_SCHED
