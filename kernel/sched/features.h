@@ -99,6 +99,12 @@ SCHED_FEAT(ENERGY_AWARE, false)
 SCHED_FEAT(MIN_CAPACITY_CAPPING, false)
 
 /*
+ * Bias schedtune boosted tasks to higher capacity CPUs.
+ * If disabled, no bias will be applied.
+ */
+SCHED_FEAT(STUNE_BOOST_BIAS_BIG, true)
+
+/*
  * Enforce the priority of candidates selected by find_best_target()
  * ON: If the target CPU saves any energy, use that.
  * OFF: Use whichever of target or backup saves most.
