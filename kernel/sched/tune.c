@@ -1073,7 +1073,7 @@ schedtune_boostgroup_init(struct schedtune *st)
 		bg = &per_cpu(cpu_boost_groups, cpu);
 		bg->group[st->idx].boost = 0;
 		bg->group[st->idx].tasks = 0;
-		bg->group[idx].ts = 0;
+		bg->group[st->idx].ts = 0;
 #ifdef CONFIG_HISI_CPU_FREQ_GOV_SCHEDUTIL
 		bg->group[st->idx].freq_boost = 0;
 #endif
