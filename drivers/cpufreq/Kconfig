@@ -323,6 +323,18 @@ config CPU_INPUT_BOOST
 
 if CPU_INPUT_BOOST
 
+config DYNAMIC_STUNE_BOOST_VALUE
+	int "Dynamic stune boost value"
+	default "0"
+	help
+	  Default SchedTune boost level for the top-app cgroup.
+
+config DYNAMIC_STUNE_BOOST_DURATION_MS
+	int "Dynamic stune boost duration"
+	default "100"
+	help
+	  SchedTune boost duration in milliseconds.
+
 config INPUT_BOOST_DURATION_MS
 	int "Input boost duration"
 	default "100"
