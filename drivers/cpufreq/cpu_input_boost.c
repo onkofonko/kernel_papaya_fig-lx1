@@ -30,7 +30,7 @@ static unsigned short dynamic_stune_boost_duration = CONFIG_DYNAMIC_STUNE_BOOST_
 #ifdef CONFIG_DYNAMIC_STUNE_BOOST
 static bool stune_boost_active;
 static int boost_slot;
-static unsigned short dynamic_stune_boost;
+static unsigned short dynamic_stune_boost = CONFIG_DYNAMIC_STUNE_BOOST_VALUE;
 module_param(dynamic_stune_boost, short, 0644);
 module_param(dynamic_stune_boost_duration, short, 0644);
 #endif
